@@ -10,11 +10,15 @@ class ShogihomeAppimage < Formula
 
   def install
     appimage = "ShogiHome-#{version}.AppImage"
-    system "./#{appimage}", "--appimage-extract", "usr/share/icons/hicolor/512x512/apps/shogihome.png"
+    system "./#{appimage}", "--appimage-extract"
     (share/"icons/hicolor/512x512/apps").install "squashfs-root/usr/share/icons/hicolor/512x512/apps/shogihome.png"
 
     libexec.install appimage => "ShogiHome.AppImage"
-    bin.install_symlink libexec/"ShogiHome.AppImage" => "shogihome"
+    libexec.install "squashfs-root" => "ShogiHome"
+    (bin/"shogihome").write <<~SH
+      #!/bin/sh
+      exec "#{opt_libexec}/ShogiHome/AppRun" "$@"
+    SH
 
     (share/"applications/shogihome.desktop").write <<~DESKTOP
       [Desktop Entry]
@@ -29,7 +33,8 @@ class ShogihomeAppimage < Formula
   end
 
   test do
-    assert_match "AppImageKit", shell_output("#{bin}/shogihome --appimage-version")
+    assert_match "Version:", shell_output("#{libexec}/ShogiHome.AppImage --appimage-version")
+    assert_path_exists libexec/"ShogiHome/AppRun"
     assert_path_exists share/"applications/shogihome.desktop"
   end
 end
