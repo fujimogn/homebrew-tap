@@ -66,15 +66,15 @@ jobs:
           cask_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$cask")"
           formula_version="$(sed -nE 's@^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v([^/]+)/release-v[^/]+-linux-appimage.zip"$@\1@p' "$formula")"
           formula_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$formula")"
+          already_current=false
           if [[ "$cask_version" == "$version" && "$cask_sha" == "$mac_sha" && "$formula_version" == "$version" && "$formula_sha" == "$linux_sha" ]]; then
-            echo "ShogiHome ${version} is already current."
-            exit 0
+            already_current=true
+          else
+            sed -E -e "s/^  version \"[^\"]+\"$/  version \"${version}\"/" -e "s/^  sha256 \"[0-9a-f]{64}\"$/  sha256 \"${mac_sha}\"/" "$cask" > "$downloads/cask.rb"
+            sed -E -e "s@^  url \"https://github.com/sunfish-shogi/shogihome/releases/download/v[^\"]+/release-v[^\"]+-linux-appimage.zip\"\$@  url \"https://github.com/sunfish-shogi/shogihome/releases/download/v${version}/release-v${version}-linux-appimage.zip\"@" -e "s/^  sha256 \"[0-9a-f]{64}\"$/  sha256 \"${linux_sha}\"/" "$formula" > "$downloads/formula.rb"
+            mv "$downloads/cask.rb" "$cask"
+            mv "$downloads/formula.rb" "$formula"
           fi
-
-          sed -E -e "s/^  version \"[^\"]+\"$/  version \"${version}\"/" -e "s/^  sha256 \"[0-9a-f]{64}\"$/  sha256 \"${mac_sha}\"/" "$cask" > "$downloads/cask.rb"
-          sed -E -e "s@^  url \"https://github.com/sunfish-shogi/shogihome/releases/download/v[^\"]+/release-v[^\"]+-linux-appimage.zip\"\$@  url \"https://github.com/sunfish-shogi/shogihome/releases/download/v${version}/release-v${version}-linux-appimage.zip\"@" -e "s/^  sha256 \"[0-9a-f]{64}\"$/  sha256 \"${linux_sha}\"/" "$formula" > "$downloads/formula.rb"
-          mv "$downloads/cask.rb" "$cask"
-          mv "$downloads/formula.rb" "$formula"
 
           brew style "$cask" "$formula"
           brew tap fujimogn/tap
@@ -82,6 +82,11 @@ jobs:
           cp "$cask" "$tap_path/Casks/shogihome.rb"
           cp "$formula" "$tap_path/Formula/shogihome-appimage.rb"
           brew audit fujimogn/tap/shogihome fujimogn/tap/shogihome-appimage
+
+          if [[ "$already_current" == true ]]; then
+            echo "ShogiHome ${version} is already current."
+            exit 0
+          fi
 
           git add "$cask" "$formula"
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "⬆️ ShogiHome を ${version} に更新する"
