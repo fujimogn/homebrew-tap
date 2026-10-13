@@ -33,7 +33,7 @@ class ShogihomeAppimage < Formula
   end
 
   test do
-    assert_match "Version:", shell_output("#{libexec}/ShogiHome.AppImage --appimage-version")
+    system libexec/"ShogiHome.AppImage", "--appimage-version"
     assert_path_exists libexec/"ShogiHome/AppRun"
     assert_path_exists share/"applications/shogihome.desktop"
   end
