@@ -16,7 +16,7 @@ jobs:
   update:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: true
       - name: Verify latest release and update tap
@@ -32,8 +32,33 @@ jobs:
           gh api repos/sunfish-shogi/shogihome/releases/latest > "$release"
           tag="$(jq -er '.tag_name' "$release")"
           [[ "$(jq -r '.draft, .prerelease' "$release")" == $'false\nfalse' ]]
-          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$tag" =~ ^v[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$ ]]
           version="${tag#v}"
+
+          cask="Casks/shogihome.rb"
+          formula="Formula/shogihome-appimage.rb"
+          [[ "$(grep -Ec '^  version "[^"]+"$' "$cask")" == 1 ]]
+          [[ "$(grep -Ec '^  sha256 "[0-9a-f]{64}"$' "$cask")" == 1 ]]
+          [[ "$(grep -Ec '^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v[^"]+/release-v[^"]+-linux-appimage.zip"$' "$formula")" == 1 ]]
+          [[ "$(grep -Ec '^  sha256 "[0-9a-f]{64}"$' "$formula")" == 1 ]]
+          cask_version="$(sed -nE 's/^  version "([^"]+)"$/\1/p' "$cask")"
+          cask_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$cask")"
+          formula_version="$(sed -nE 's@^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v([^/]+)/release-v[^/]+-linux-appimage.zip"$@\1@p' "$formula")"
+          formula_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$formula")"
+          [[ "$cask_version" =~ ^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$ ]]
+          [[ "$formula_version" =~ ^[0-9]{1,9}\.[0-9]{1,9}\.[0-9]{1,9}$ ]]
+          version_is_older() {
+            local new_major new_minor new_patch old_major old_minor old_patch
+            IFS=. read -r new_major new_minor new_patch <<< "$1"
+            IFS=. read -r old_major old_minor old_patch <<< "$2"
+            (( 10#$new_major < 10#$old_major ||
+               (10#$new_major == 10#$old_major && 10#$new_minor < 10#$old_minor) ||
+               (10#$new_major == 10#$old_major && 10#$new_minor == 10#$old_minor && 10#$new_patch < 10#$old_patch) ))
+          }
+          if version_is_older "$version" "$cask_version" || version_is_older "$version" "$formula_version"; then
+            echo "Latest release ${version} is older than tap versions (${cask_version}, ${formula_version}); leaving tap unchanged."
+            exit 0
+          fi
 
           for platform in mac linux-appimage; do
             asset="release-${tag}-${platform}.zip"
@@ -56,16 +81,6 @@ jobs:
             grep -Fxq "$expected" <<< "$entries"
           done
 
-          cask="Casks/shogihome.rb"
-          formula="Formula/shogihome-appimage.rb"
-          [[ "$(grep -Ec '^  version "[^"]+"$' "$cask")" == 1 ]]
-          [[ "$(grep -Ec '^  sha256 "[0-9a-f]{64}"$' "$cask")" == 1 ]]
-          [[ "$(grep -Ec '^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v[^"]+/release-v[^"]+-linux-appimage.zip"$' "$formula")" == 1 ]]
-          [[ "$(grep -Ec '^  sha256 "[0-9a-f]{64}"$' "$formula")" == 1 ]]
-          cask_version="$(sed -nE 's/^  version "([^"]+)"$/\1/p' "$cask")"
-          cask_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$cask")"
-          formula_version="$(sed -nE 's@^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v([^/]+)/release-v[^/]+-linux-appimage.zip"$@\1@p' "$formula")"
-          formula_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$formula")"
           already_current=false
           if [[ "$cask_version" == "$version" && "$cask_sha" == "$mac_sha" && "$formula_version" == "$version" && "$formula_sha" == "$linux_sha" ]]; then
             already_current=true
