@@ -5,6 +5,11 @@ class ShogihomeAppimage < Formula
   sha256 "fe8c7d18df85759c4c976150a8a8d28436989df2978a9e55b95b5d96291841b2"
   license "MIT"
 
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
   depends_on arch: :x86_64
   depends_on :linux
 

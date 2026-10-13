@@ -1,0 +1,88 @@
+name: Update ShogiHome
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-shogihome
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          persist-credentials: true
+      - name: Verify latest release and update tap
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release="$(mktemp)"
+          downloads="$(mktemp -d)"
+          trap 'rm -f "$release" "$downloads"/*; rmdir "$downloads"' EXIT
+
+          gh api repos/sunfish-shogi/shogihome/releases/latest > "$release"
+          tag="$(jq -er '.tag_name' "$release")"
+          [[ "$(jq -r '.draft, .prerelease' "$release")" == $'false\nfalse' ]]
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${tag#v}"
+
+          for platform in mac linux-appimage; do
+            asset="release-${tag}-${platform}.zip"
+            digest="$(jq -er --arg name "$asset" '[.assets[] | select(.name == $name)] | if length == 1 then .[0].digest else error("missing or duplicate asset") end' "$release")"
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            gh release download "$tag" --repo sunfish-shogi/shogihome --pattern "$asset" --dir "$downloads"
+            actual="$(shasum -a 256 "$downloads/$asset" | cut -d ' ' -f 1)"
+            [[ "sha256:$actual" == "$digest" ]]
+            unzip -tq "$downloads/$asset" > /dev/null
+            entries="$(unzip -Z -1 "$downloads/$asset")"
+            if [[ "$platform" == mac ]]; then
+              expected="ShogiHome-${version}-universal.dmg"
+              [[ "$(grep -Ec '^ShogiHome-.*-universal\.dmg$' <<< "$entries")" == 1 ]]
+              mac_sha="$actual"
+            else
+              expected="ShogiHome-${version}.AppImage"
+              [[ "$(grep -Ec '^ShogiHome-.*\.AppImage$' <<< "$entries")" == 1 ]]
+              linux_sha="$actual"
+            fi
+            grep -Fxq "$expected" <<< "$entries"
+          done
+
+          cask="Casks/shogihome.rb"
+          formula="Formula/shogihome-appimage.rb"
+          [[ "$(grep -Ec '^  version "[^"]+"$' "$cask")" == 1 ]]
+          [[ "$(grep -Ec '^  sha256 "[0-9a-f]{64}"$' "$cask")" == 1 ]]
+          [[ "$(grep -Ec '^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v[^"]+/release-v[^"]+-linux-appimage.zip"$' "$formula")" == 1 ]]
+          [[ "$(grep -Ec '^  sha256 "[0-9a-f]{64}"$' "$formula")" == 1 ]]
+          cask_version="$(sed -nE 's/^  version "([^"]+)"$/\1/p' "$cask")"
+          cask_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$cask")"
+          formula_version="$(sed -nE 's@^  url "https://github.com/sunfish-shogi/shogihome/releases/download/v([^/]+)/release-v[^/]+-linux-appimage.zip"$@\1@p' "$formula")"
+          formula_sha="$(sed -nE 's/^  sha256 "([0-9a-f]{64})"$/\1/p' "$formula")"
+          if [[ "$cask_version" == "$version" && "$cask_sha" == "$mac_sha" && "$formula_version" == "$version" && "$formula_sha" == "$linux_sha" ]]; then
+            echo "ShogiHome ${version} is already current."
+            exit 0
+          fi
+
+          sed -E -e "s/^  version \"[^\"]+\"$/  version \"${version}\"/" -e "s/^  sha256 \"[0-9a-f]{64}\"$/  sha256 \"${mac_sha}\"/" "$cask" > "$downloads/cask.rb"
+          sed -E -e "s@^  url \"https://github.com/sunfish-shogi/shogihome/releases/download/v[^\"]+/release-v[^\"]+-linux-appimage.zip\"\$@  url \"https://github.com/sunfish-shogi/shogihome/releases/download/v${version}/release-v${version}-linux-appimage.zip\"@" -e "s/^  sha256 \"[0-9a-f]{64}\"$/  sha256 \"${linux_sha}\"/" "$formula" > "$downloads/formula.rb"
+          mv "$downloads/cask.rb" "$cask"
+          mv "$downloads/formula.rb" "$formula"
+
+          brew style "$cask" "$formula"
+          brew tap fujimogn/tap
+          tap_path="$(brew --repository fujimogn/tap)"
+          cp "$cask" "$tap_path/Casks/shogihome.rb"
+          cp "$formula" "$tap_path/Formula/shogihome-appimage.rb"
+          brew audit fujimogn/tap/shogihome fujimogn/tap/shogihome-appimage
+
+          git add "$cask" "$formula"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "⬆️ ShogiHome を ${version} に更新する"
+          git push origin HEAD:main
