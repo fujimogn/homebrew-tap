@@ -23,7 +23,7 @@ cask "shogihome" do
   end
 
   zap trash: [
-    "~/Library/Application Support/shogihome",
+    "~/Library/Application Support/ShogiHome",
     "~/Library/Preferences/com.electron.electron-shogi.plist",
     "~/Library/Saved Application State/com.electron.electron-shogi.savedState",
   ]
