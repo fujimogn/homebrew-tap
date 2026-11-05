@@ -93,6 +93,8 @@ jobs:
 
           brew style "$cask" "$formula"
           brew tap fujimogn/tap
+          # Homebrew は信頼を登録していない tap の cask を読まない（2026-11-02 の週次更新がこれで止まった）
+          brew trust fujimogn/tap
           tap_path="$(brew --repository fujimogn/tap)"
           cp "$cask" "$tap_path/Casks/shogihome.rb"
           cp "$formula" "$tap_path/Formula/shogihome-appimage.rb"
