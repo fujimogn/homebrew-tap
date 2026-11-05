@@ -1,8 +1,8 @@
 class ShogihomeAppimage < Formula
   desc "Shogi GUI for playing games and studying records"
   homepage "https://sunfish-shogi.github.io/shogihome/"
-  url "https://github.com/sunfish-shogi/shogihome/releases/download/v1.29.1/release-v1.29.1-linux-appimage.zip"
-  sha256 "fe8c7d18df85759c4c976150a8a8d28436989df2978a9e55b95b5d96291841b2"
+  url "https://github.com/sunfish-shogi/shogihome/releases/download/v1.30.0/release-v1.30.0-linux-appimage.zip"
+  sha256 "e48ddc8305d58b1bd1e352caaed71328d4d20ce180a414d9d032ffe206f72186"
   license "MIT"
 
   livecheck do
